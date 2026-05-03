@@ -1,0 +1,473 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Professor Publication Assistant</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: Arial, sans-serif;
+      background: #1a1a2e;
+      color: #eee;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 40px 20px;
+    }
+
+    h1 { color: #e94560; margin-bottom: 6px; }
+
+    p.subtitle { color: #aaa; margin-bottom: 30px; font-size: 15px; }
+
+    .container { width: 100%; max-width: 800px; }
+
+    .section {
+      background: #16213e;
+      border-radius: 8px;
+      padding: 20px;
+      margin-bottom: 20px;
+      border: 1px solid #444;
+    }
+
+    .section h2 {
+      color: #e94560;
+      margin-bottom: 15px;
+      font-size: 14px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+
+    /* Status grid */
+    .status-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+    }
+
+    @media (max-width: 480px) {
+      .status-grid { grid-template-columns: 1fr; }
+    }
+
+    .stat {
+      background: #0f3460;
+      border-radius: 6px;
+      padding: 18px 20px;
+      text-align: center;
+    }
+
+    .stat-value { font-size: 22px; font-weight: bold; color: #e94560; }
+    .stat-label { font-size: 12px; color: #aaa; margin-top: 4px; }
+
+    /* Inputs */
+    textarea,
+    input[type="text"],
+    input[type="number"] {
+      width: 100%;
+      padding: 12px;
+      margin-bottom: 12px;
+      border-radius: 8px;
+      border: 1px solid #444;
+      background: #0f3460;
+      color: #eee;
+      font-size: 15px;
+    }
+
+    textarea { resize: vertical; }
+
+    .filter-row { display: flex; gap: 12px; }
+    .filter-row input { flex: 1; }
+
+    /* Buttons */
+    button {
+      width: 100%;
+      padding: 12px;
+      background: #e94560;
+      color: white;
+      border: none;
+      border-radius: 8px;
+      font-size: 16px;
+      cursor: pointer;
+      margin-bottom: 8px;
+    }
+
+    button:hover { background: #c73652; }
+
+    button.secondary {
+      background: #0f3460;
+      font-size: 14px;
+      padding: 9px;
+    }
+
+    button.secondary:hover { background: #1a4a8a; }
+
+    /* Filters panel */
+    .filters-panel { display: none; margin-top: 4px; }
+    .filters-panel.open { display: block; }
+
+    /* Answer box */
+    .answer-box {
+      background: #0f3460;
+      border-radius: 8px;
+      padding: 16px;
+      min-height: 80px;
+      white-space: pre-wrap;
+      line-height: 1.6;
+      font-size: 15px;
+    }
+
+    /* Source cards */
+    .source-card {
+      background: #0f3460;
+      border-radius: 8px;
+      padding: 16px;
+      margin-top: 12px;
+      border-left: 3px solid #e94560;
+    }
+
+    .source-card:first-child { margin-top: 0; }
+
+    .source-title {
+      color: #e94560;
+      font-weight: bold;
+      font-size: 15px;
+      margin-bottom: 5px;
+    }
+
+    .source-meta {
+      color: #aaa;
+      font-size: 13px;
+      margin-bottom: 10px;
+    }
+
+    .source-doi {
+      color: #7aadff;
+      font-size: 12px;
+      margin-bottom: 8px;
+      word-break: break-all;
+    }
+
+    .source-excerpt {
+      font-size: 14px;
+      line-height: 1.6;
+      color: #ccc;
+    }
+
+    .source-scores {
+      display: flex;
+      gap: 8px;
+      margin-top: 10px;
+      flex-wrap: wrap;
+    }
+
+    .badge {
+      background: #1a1a2e;
+      border-radius: 4px;
+      padding: 3px 8px;
+      font-size: 12px;
+      color: #aaa;
+    }
+
+    .query-note {
+      margin-top: 8px;
+      font-size: 12px;
+      color: #666;
+      font-style: italic;
+    }
+
+    button.reset-btn {
+      background: transparent;
+      color: #aaa;
+      border: 1px solid #444;
+      font-size: 13px;
+      padding: 8px;
+      margin-top: 4px;
+    }
+
+    button.reset-btn:hover {
+      background: #0f3460;
+      color: #eee;
+      border-color: #666;
+    }
+
+    input[type="file"] {
+      width: 100%;
+      padding: 10px 12px;
+      margin-bottom: 12px;
+      border-radius: 8px;
+      border: 1px solid #444;
+      background: #0f3460;
+      color: #aaa;
+      font-size: 14px;
+      cursor: pointer;
+    }
+
+    .upload-note {
+      font-size: 13px;
+      color: #888;
+      margin-bottom: 14px;
+      line-height: 1.5;
+    }
+
+    .upload-status {
+      margin-top: 12px;
+      background: #0f3460;
+      border-radius: 8px;
+      padding: 12px 16px;
+      font-size: 14px;
+      min-height: 44px;
+      display: none;
+    }
+
+    /* States */
+    .loading { color: #aaa; font-style: italic; }
+    .error   { color: #e94560; }
+    .success { color: #4ecca3; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Professor Publication Assistant</h1>
+    <p class="subtitle">Search and ask questions across the professor's publication archive</p>
+
+    <!-- Upload -->
+    <div class="section">
+      <h2>Upload Publication Master List</h2>
+      <p class="upload-note">
+        Upload a <strong>.docx</strong> file containing the full publication list.
+        The system will parse, enrich, and index it into the searchable archive.
+      </p>
+      <input type="file" id="masterdoc" accept=".docx" />
+      <button onclick="uploadMasterlist()">Build Archive</button>
+      <div class="upload-status" id="uploadStatus"></div>
+    </div>
+
+    <!-- Status -->
+    <div class="section">
+      <h2>Corpus Status</h2>
+      <div class="status-grid" id="statusGrid">
+        <span class="loading">Loading...</span>
+      </div>
+    </div>
+
+    <!-- Ask -->
+    <div class="section">
+      <h2>Ask a Question</h2>
+      <textarea id="question" rows="3" placeholder="Ask a question about the professor's research..."></textarea>
+      <button class="secondary" onclick="toggleFilters()" id="filterToggle">+ Filters</button>
+
+      <div class="filters-panel" id="filtersPanel">
+        <div class="filter-row">
+          <input type="number" id="yearFrom" placeholder="Year from (e.g. 2010)" />
+          <input type="number" id="yearTo"   placeholder="Year to (e.g. 2023)" />
+        </div>
+        <input type="text" id="author" placeholder="Author contains (case-insensitive)" />
+        <input type="text" id="doi"    placeholder="DOI (exact match)" />
+        <input type="number" id="pubId" placeholder="Publication ID (exact)" />
+        <button class="reset-btn" onclick="resetFilters()">Reset Filters</button>
+      </div>
+
+      <button onclick="askQuestion()">Ask</button>
+    </div>
+
+    <!-- Answer -->
+    <div class="section" id="answerSection" style="display:none">
+      <h2>Answer</h2>
+      <div class="answer-box" id="answer"></div>
+      <div class="query-note" id="queryNote"></div>
+    </div>
+
+    <!-- Sources -->
+    <div class="section" id="sourcesSection" style="display:none">
+      <h2>Sources</h2>
+      <div id="sources"></div>
+    </div>
+  </div>
+
+  <script>
+    async function uploadMasterlist() {
+      const fileInput  = document.getElementById('masterdoc');
+      const statusBox  = document.getElementById('uploadStatus');
+
+      if (!fileInput.files[0]) {
+        statusBox.style.display = 'block';
+        statusBox.innerHTML = '<span class="error">Please select a .docx file first.</span>';
+        return;
+      }
+
+      statusBox.style.display = 'block';
+      statusBox.innerHTML = '<span class="loading">Uploading...</span>';
+
+      const formData = new FormData();
+      formData.append('file', fileInput.files[0]);
+
+      try {
+        const resp = await fetch('/upload_masterlist', {
+          method: 'POST',
+          body:   formData,
+        });
+        const data = await resp.json();
+
+        if (resp.ok) {
+          statusBox.innerHTML = `<span class="success">${data.message}</span>`;
+          fileInput.value = '';
+        } else {
+          statusBox.innerHTML = `<span class="error">${data.error || 'Upload failed.'}</span>`;
+        }
+      } catch (e) {
+        statusBox.innerHTML = '<span class="error">Upload failed. Check your connection and try again.</span>';
+      }
+    }
+
+    async function loadStatus() {
+      const grid = document.getElementById('statusGrid');
+      try {
+        const resp = await fetch('/status');
+        const d    = await resp.json();
+
+        const years = d.year_distribution ? Object.keys(d.year_distribution).sort() : [];
+        const yearRange = years.length >= 2
+          ? years[0] + '-' + years[years.length - 1]
+          : (years[0] || '-');
+
+        grid.innerHTML = `
+          <div class="stat">
+            <div class="stat-value">${d.total_publications}</div>
+            <div class="stat-label">Publications</div>
+          </div>
+          <div class="stat">
+            <div class="stat-value">${yearRange}</div>
+            <div class="stat-label">Career Coverage</div>
+          </div>
+        `;
+      } catch (e) {
+        grid.innerHTML = '<span class="error">Could not load status.</span>';
+      }
+    }
+
+    function toggleFilters() {
+      const panel  = document.getElementById('filtersPanel');
+      const button = document.getElementById('filterToggle');
+      const open   = panel.classList.toggle('open');
+      button.textContent = open ? '- Filters' : '+ Filters';
+    }
+
+    function resetFilters() {
+      ['yearFrom', 'yearTo', 'author', 'doi', 'pubId'].forEach(id => {
+        document.getElementById(id).value = '';
+      });
+    }
+
+    async function askQuestion() {
+      const question = document.getElementById('question').value.trim();
+      if (!question) {
+        alert('Please enter a question.');
+        return;
+      }
+
+      const answerSection  = document.getElementById('answerSection');
+      const sourcesSection = document.getElementById('sourcesSection');
+      const answerBox      = document.getElementById('answer');
+      const sourcesDiv     = document.getElementById('sources');
+      const queryNote      = document.getElementById('queryNote');
+
+      answerSection.style.display  = 'block';
+      sourcesSection.style.display = 'none';
+      answerBox.innerHTML = '<span class="loading">Searching and thinking...</span>';
+      queryNote.textContent = '';
+      sourcesDiv.innerHTML  = '';
+
+      const body = { question };
+
+      const yearFrom = document.getElementById('yearFrom').value;
+      const yearTo   = document.getElementById('yearTo').value;
+      const author   = document.getElementById('author').value.trim();
+      const doi      = document.getElementById('doi').value.trim();
+      const pubId    = document.getElementById('pubId').value.trim();
+
+      if (yearFrom) body.year_from      = parseInt(yearFrom);
+      if (yearTo)   body.year_to        = parseInt(yearTo);
+      if (author)   body.author         = author;
+      if (doi)      body.doi            = doi;
+      if (pubId)    body.publication_id = parseInt(pubId);
+
+      try {
+        const resp = await fetch('/ask', {
+          method:  'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body:    JSON.stringify(body),
+        });
+
+        const data = await resp.json();
+
+        if (data.error) {
+          answerBox.innerHTML = `<span class="error">${data.error}</span>`;
+          return;
+        }
+
+        answerBox.innerText = data.answer;
+
+        if (data.query_used && data.query_used !== question) {
+          queryNote.textContent = 'Search query: "' + data.query_used + '"';
+        }
+
+        const sources = data.sources || [];
+        if (sources.length > 0) {
+          sourcesSection.style.display = 'block';
+          sourcesDiv.innerHTML = sources.map((s, i) => buildSourceCard(s, i)).join('');
+        }
+
+      } catch (e) {
+        answerBox.innerHTML = '<span class="error">Something went wrong. Try again.</span>';
+      }
+    }
+
+    function buildSourceCard(s, i) {
+      const title    = s.title   || '(untitled)';
+      const year     = s.year    || '';
+      const authors  = s.authors || '';
+      const doi      = s.doi     || '';
+      const excerpt  = (s.chunk_text || '').substring(0, 380);
+      const ellipsis = (s.chunk_text || '').length > 380 ? '...' : '';
+
+      const vRank = s.vector_rank ? `<span class="badge">vector #${s.vector_rank}</span>` : '';
+      const bRank = s.bm25_rank   ? `<span class="badge">BM25 #${s.bm25_rank}</span>`    : '';
+
+      const doiHtml = doi
+        ? `<div class="source-doi">DOI: ${doi}</div>`
+        : '';
+
+      return `
+        <div class="source-card">
+          <div class="source-title">${i + 1}. ${escHtml(title)}</div>
+          <div class="source-meta">${escHtml(authors)}${authors && year ? ' &middot; ' : ''}${year}</div>
+          ${doiHtml}
+          <div class="source-excerpt">${escHtml(excerpt)}${ellipsis}</div>
+          <div class="source-scores">
+            <span class="badge">RRF ${(s.rrf_score || 0).toFixed(4)}</span>
+            ${vRank}
+            ${bRank}
+            <span class="badge">pub ${s.publication_id}</span>
+          </div>
+        </div>
+      `;
+    }
+
+    function escHtml(str) {
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+    }
+
+    document.getElementById('question').addEventListener('keydown', function(e) {
+      if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) askQuestion();
+    });
+
+    loadStatus();
+  </script>
+</body>
+</html>

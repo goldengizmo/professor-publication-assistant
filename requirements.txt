@@ -1,0 +1,24 @@
+# ── API server ─────────────────────────────────────────────────────────────────
+fastapi==0.136.1
+uvicorn==0.46.0
+python-multipart==0.0.27
+
+# ── LLM / embeddings / vector DB ───────────────────────────────────────────────
+anthropic==0.97.0
+cohere==6.1.0
+pinecone==8.1.2
+
+# ── Retrieval ───────────────────────────────────────────────────────────────────
+rank-bm25==0.2.2
+
+# ── Corpus pipeline (PDF, HTML, DOCX extraction) ───────────────────────────────
+PyMuPDF==1.27.2.3
+pdfplumber==0.11.9
+beautifulsoup4==4.14.3
+lxml==6.1.0
+python-docx==1.2.0
+requests==2.33.1
+
+# ── Config / models ─────────────────────────────────────────────────────────────
+python-dotenv==1.2.2
+pydantic==2.12.5

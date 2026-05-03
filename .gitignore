@@ -1,0 +1,38 @@
+# ── Secrets / environment ───────────────────────────────────────────────────────
+.env
+
+# ── Virtual environment ─────────────────────────────────────────────────────────
+.venv/
+
+# ── Python bytecode ─────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.pyo
+
+# ── Uploads (professor-submitted files) ────────────────────────────────────────
+uploads/
+
+# ── Local corpus inputs (large, not needed by production API) ──────────────────
+downloaded_papers/
+documents/
+
+# ── Pipeline artifact JSON (regeneratable locally, not needed at runtime) ───────
+parsed_publications.json
+publication_metadata.json
+enriched_publications.json
+download_report.json
+enrichment_report.json
+
+# ── OS junk ─────────────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ── IDE / editor ────────────────────────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*~
+
+# ── Claude Code internal ────────────────────────────────────────────────────────
+.claude/
