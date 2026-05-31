@@ -118,6 +118,13 @@
       font-size: 15px;
     }
 
+    /* Chart container */
+    #chartContainer {
+      position: relative;
+      height: 380px;
+      width: 100%;
+    }
+
     /* Source cards */
     .source-card {
       background: #0f3460;
@@ -226,10 +233,11 @@
     .error   { color: #e94560; }
     .success { color: #4ecca3; }
   </style>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 </head>
 <body>
   <div class="container">
-    <h1>Professor Publication Assistant</h1>
+    <h1 id="welcome-heading">Professor Publication Assistant</h1>
     <p class="subtitle">Search and ask questions across the professor's publication archive</p>
 
     <!-- Upload -->
@@ -272,14 +280,17 @@
       <button onclick="askQuestion()">Ask</button>
     </div>
 
-    <!-- Answer -->
-    <div class="section" id="answerSection" style="display:none">
-      <h2>Answer</h2>
-      <div class="answer-box" id="answer"></div>
+    <!-- Result (chart OR text answer) -->
+    <div class="section" id="resultSection" style="display:none">
+      <h2 id="resultTitle">Result</h2>
+      <div id="answer" class="answer-box" style="display:none"></div>
       <div class="query-note" id="queryNote"></div>
+      <div id="chartContainer" style="display:none">
+        <canvas id="insightChart"></canvas>
+      </div>
     </div>
 
-    <!-- Sources -->
+    <!-- Sources (text answers only) -->
     <div class="section" id="sourcesSection" style="display:none">
       <h2>Sources</h2>
       <div id="sources"></div>
@@ -287,9 +298,13 @@
   </div>
 
   <script>
+    let _currentChart = null;
+
+    // ── Upload ─────────────────────────────────────────────────────────────────
+
     async function uploadMasterlist() {
-      const fileInput  = document.getElementById('masterdoc');
-      const statusBox  = document.getElementById('uploadStatus');
+      const fileInput = document.getElementById('masterdoc');
+      const statusBox = document.getElementById('uploadStatus');
 
       if (!fileInput.files[0]) {
         statusBox.style.display = 'block';
@@ -304,12 +319,8 @@
       formData.append('file', fileInput.files[0]);
 
       try {
-        const resp = await fetch('/upload_masterlist', {
-          method: 'POST',
-          body:   formData,
-        });
+        const resp = await fetch('/upload_masterlist', { method: 'POST', body: formData });
         const data = await resp.json();
-
         if (resp.ok) {
           statusBox.innerHTML = `<span class="success">${data.message}</span>`;
           fileInput.value = '';
@@ -321,6 +332,8 @@
       }
     }
 
+    // ── Status ─────────────────────────────────────────────────────────────────
+
     async function loadStatus() {
       const grid = document.getElementById('statusGrid');
       try {
@@ -329,8 +342,12 @@
 
         const years = d.year_distribution ? Object.keys(d.year_distribution).sort() : [];
         const yearRange = years.length >= 2
-          ? years[0] + '-' + years[years.length - 1]
-          : (years[0] || '-');
+          ? years[0] + '–' + years[years.length - 1]
+          : (years[0] || '–');
+
+        if (d.professor_name) {
+          document.getElementById('welcome-heading').textContent = 'Welcome, Professor ' + d.professor_name;
+        }
 
         grid.innerHTML = `
           <div class="stat">
@@ -347,6 +364,8 @@
       }
     }
 
+    // ── Filters ────────────────────────────────────────────────────────────────
+
     function toggleFilters() {
       const panel  = document.getElementById('filtersPanel');
       const button = document.getElementById('filterToggle');
@@ -360,27 +379,60 @@
       });
     }
 
+    // ── Ask (routes through /insights first, falls back to /ask) ───────────────
+
     async function askQuestion() {
       const question = document.getElementById('question').value.trim();
-      if (!question) {
-        alert('Please enter a question.');
-        return;
+      if (!question) { alert('Please enter a question.'); return; }
+
+      const resultSection  = document.getElementById('resultSection');
+      const sourcesSection = document.getElementById('sourcesSection');
+      const resultTitle    = document.getElementById('resultTitle');
+      const answerBox      = document.getElementById('answer');
+      const queryNote      = document.getElementById('queryNote');
+      const chartContainer = document.getElementById('chartContainer');
+      const sourcesDiv     = document.getElementById('sources');
+
+      // Reset
+      resultSection.style.display  = 'block';
+      sourcesSection.style.display = 'none';
+      answerBox.style.display      = 'none';
+      answerBox.innerHTML          = '';
+      chartContainer.style.display = 'none';
+      queryNote.textContent        = '';
+      sourcesDiv.innerHTML         = '';
+      resultTitle.textContent      = 'Thinking…';
+
+      if (_currentChart) { _currentChart.destroy(); _currentChart = null; }
+
+      // 1. Check /insights
+      try {
+        const iResp = await fetch('/insights', {
+          method:  'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body:    JSON.stringify({ question }),
+        });
+        const iData = await iResp.json();
+
+        const hasData = iData.data &&
+          !(Array.isArray(iData.data) && iData.data.length === 0) &&
+          !(typeof iData.data === 'object' && !Array.isArray(iData.data) && Object.keys(iData.data).length === 0);
+
+        if (iData.template && iData.template !== 'none' && hasData) {
+          chartContainer.style.display = 'block';
+          renderChart(iData.template, iData.data);
+          return;
+        }
+      } catch (_) {
+        // /insights failed — fall through to /ask
       }
 
-      const answerSection  = document.getElementById('answerSection');
-      const sourcesSection = document.getElementById('sourcesSection');
-      const answerBox      = document.getElementById('answer');
-      const sourcesDiv     = document.getElementById('sources');
-      const queryNote      = document.getElementById('queryNote');
-
-      answerSection.style.display  = 'block';
-      sourcesSection.style.display = 'none';
-      answerBox.innerHTML = '<span class="loading">Searching and thinking...</span>';
-      queryNote.textContent = '';
-      sourcesDiv.innerHTML  = '';
+      // 2. Fall back to /ask
+      resultTitle.textContent = 'Answer';
+      answerBox.style.display = 'block';
+      answerBox.innerHTML     = '<span class="loading">Searching and thinking…</span>';
 
       const body = { question };
-
       const yearFrom = document.getElementById('yearFrom').value;
       const yearTo   = document.getElementById('yearTo').value;
       const author   = document.getElementById('author').value.trim();
@@ -399,7 +451,6 @@
           headers: { 'Content-Type': 'application/json' },
           body:    JSON.stringify(body),
         });
-
         const data = await resp.json();
 
         if (data.error) {
@@ -418,11 +469,94 @@
           sourcesSection.style.display = 'block';
           sourcesDiv.innerHTML = sources.map((s, i) => buildSourceCard(s, i)).join('');
         }
-
       } catch (e) {
         answerBox.innerHTML = '<span class="error">Something went wrong. Try again.</span>';
       }
     }
+
+    // ── Chart rendering ────────────────────────────────────────────────────────
+
+    function renderChart(template, data) {
+      const titleEl    = document.getElementById('resultTitle');
+      const ctx        = document.getElementById('insightChart').getContext('2d');
+      const gridColor  = '#2a2a4a';
+      const tickColor  = '#aaa';
+      const baseOpts   = {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+      };
+
+      if (template === 'timeline') {
+        titleEl.textContent = 'Publications Over Time';
+        const labels = Object.keys(data).sort();
+        const values = labels.map(k => data[k]);
+        _currentChart = new Chart(ctx, {
+          type: 'bar',
+          data: { labels, datasets: [{ label: 'Publications', data: values, backgroundColor: '#e94560', borderRadius: 3 }] },
+          options: {
+            ...baseOpts,
+            scales: {
+              x: { ticks: { color: tickColor }, grid: { color: gridColor } },
+              y: { ticks: { color: tickColor }, grid: { color: gridColor }, beginAtZero: true },
+            },
+          },
+        });
+
+      } else if (template === 'collaborators') {
+        titleEl.textContent = 'Top 15 Collaborators';
+        const labels = data.map(d => d.is_professor ? 'You (Taha)' : d.name);
+        const values = data.map(d => d.count);
+        const colors = data.map(d => d.is_professor ? '#e94560' : '#7aadff');
+        _currentChart = new Chart(ctx, {
+          type: 'bar',
+          data: { labels, datasets: [{ label: 'Co-authored Papers', data: values, backgroundColor: colors, borderRadius: 3 }] },
+          options: {
+            ...baseOpts,
+            scales: {
+              x: { ticks: { color: tickColor, maxRotation: 45, minRotation: 30, font: { size: 11 } }, grid: { color: gridColor } },
+              y: { ticks: { color: tickColor }, grid: { color: gridColor }, beginAtZero: true },
+            },
+          },
+        });
+
+      } else if (template === 'themes') {
+        titleEl.textContent = 'Research Themes';
+        const labels = data.map(d => d.theme);
+        const values = data.map(d => d.count);
+        _currentChart = new Chart(ctx, {
+          type: 'bar',
+          data: { labels, datasets: [{ label: 'Publications', data: values, backgroundColor: '#4ecca3', borderRadius: 3 }] },
+          options: {
+            ...baseOpts,
+            indexAxis: 'y',
+            scales: {
+              x: { ticks: { color: tickColor }, grid: { color: gridColor }, beginAtZero: true },
+              y: { ticks: { color: tickColor, font: { size: 12 } }, grid: { color: gridColor } },
+            },
+          },
+        });
+
+      } else if (template === 'geography') {
+        titleEl.textContent = 'Geographic Focus';
+        const labels  = data.map(d => d.region);
+        const values  = data.map(d => d.count);
+        const palette = ['#e94560', '#7aadff', '#4ecca3', '#f5a623', '#9b59b6', '#1abc9c'];
+        _currentChart = new Chart(ctx, {
+          type: 'doughnut',
+          data: {
+            labels,
+            datasets: [{ data: values, backgroundColor: palette.slice(0, labels.length), borderColor: '#16213e', borderWidth: 2 }],
+          },
+          options: {
+            ...baseOpts,
+            plugins: { legend: { display: true, labels: { color: '#eee', padding: 16, font: { size: 13 } } } },
+          },
+        });
+      }
+    }
+
+    // ── Source cards ───────────────────────────────────────────────────────────
 
     function buildSourceCard(s, i) {
       const title    = s.title   || '(untitled)';
@@ -431,13 +565,9 @@
       const doi      = s.doi     || '';
       const excerpt  = (s.chunk_text || '').substring(0, 380);
       const ellipsis = (s.chunk_text || '').length > 380 ? '...' : '';
-
-      const vRank = s.vector_rank ? `<span class="badge">vector #${s.vector_rank}</span>` : '';
-      const bRank = s.bm25_rank   ? `<span class="badge">BM25 #${s.bm25_rank}</span>`    : '';
-
-      const doiHtml = doi
-        ? `<div class="source-doi">DOI: ${doi}</div>`
-        : '';
+      const vRank    = s.vector_rank ? `<span class="badge">vector #${s.vector_rank}</span>` : '';
+      const bRank    = s.bm25_rank   ? `<span class="badge">BM25 #${s.bm25_rank}</span>`    : '';
+      const doiHtml  = doi ? `<div class="source-doi">DOI: ${doi}</div>` : '';
 
       return `
         <div class="source-card">
@@ -447,8 +577,7 @@
           <div class="source-excerpt">${escHtml(excerpt)}${ellipsis}</div>
           <div class="source-scores">
             <span class="badge">RRF ${(s.rrf_score || 0).toFixed(4)}</span>
-            ${vRank}
-            ${bRank}
+            ${vRank}${bRank}
             <span class="badge">pub ${s.publication_id}</span>
           </div>
         </div>
@@ -457,10 +586,8 @@
 
     function escHtml(str) {
       return String(str)
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;');
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
     }
 
     document.getElementById('question').addEventListener('keydown', function(e) {

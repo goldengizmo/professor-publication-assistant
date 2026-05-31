@@ -9,6 +9,7 @@ Endpoints:
   GET  /publications -> deduplicated publication list from corpus
   GET  /filters    -> available years and file types for UI dropdowns
   POST /ask              -> hybrid retrieve + Claude answer
+  POST /insights         -> match question to analytics template + pre-computed data
   POST /upload_masterlist -> save uploaded .docx for future pipeline ingestion
 
 Startup: initialises Retriever (Pinecone + Cohere + BM25) once.
@@ -18,6 +19,7 @@ Startup: initialises Retriever (Pinecone + Cohere + BM25) once.
 
 import os
 import shutil
+from collections import Counter
 from contextlib import asynccontextmanager
 from dataclasses import asdict
 from pathlib import Path
@@ -37,6 +39,8 @@ load_dotenv()
 
 _retriever: Optional[Retriever] = None
 _anthropic = None
+_insights_data: dict = {}
+_professor_name: str = ""
 
 _SYSTEM_PROMPT = (
     "You are a research assistant with access to excerpts from a professor's "
@@ -44,16 +48,128 @@ _SYSTEM_PROMPT = (
     "Be concise, cite specific findings, and indicate when the context is insufficient."
 )
 
+_CLASSIFY_PROMPT = (
+    "You classify questions about an academic publication corpus into chart categories.\n"
+    "Return 'none' if the question asks about specific content, findings, papers, drugs, diseases,\n"
+    "or any particular event or result — those need a text answer, not a chart.\n"
+    "Only return a category when the question clearly asks for an analytical overview of the whole corpus:\n"
+    "  timeline      - publication counts or trends across years (e.g. 'how many papers per year')\n"
+    "  collaborators - co-authorship patterns (e.g. 'who have I worked with most')\n"
+    "  themes        - recurring research topics (e.g. 'what are my main research themes')\n"
+    "  geography     - geographic focus of the work (e.g. 'where is my research focused')\n"
+    "If in doubt, return 'none'.\n"
+    "Reply with exactly one lowercase word: timeline, collaborators, themes, geography, or none.\n\n"
+    "Question: "
+)
+
 _FRONTEND    = Path(__file__).parent / "index.html"
 _UPLOADS_DIR = Path(__file__).parent / "uploads"
+
+
+# ── insights pre-computation ───────────────────────────────────────────────────
+
+def _build_insights_data(corpus: list) -> dict:
+    # Deduplicate: keep first chunk per publication
+    seen: dict[int, dict] = {}
+    for chunk in corpus:
+        pid = chunk["publication_id"]
+        if pid not in seen:
+            seen[pid] = chunk
+    pubs = list(seen.values())
+
+    # 1. Timeline: publications per year
+    year_counts: Counter = Counter()
+    for p in pubs:
+        yr = p.get("year")
+        if yr:
+            year_counts[str(yr)] += 1
+    timeline = dict(sorted(year_counts.items()))
+
+    # 2. Top 15 collaborators — detect professor by most frequent last name
+    author_counts: Counter = Counter()
+    last_name_counts: Counter = Counter()
+    for p in pubs:
+        for name in [a.strip() for a in (p.get("authors") or "").split(",") if a.strip()]:
+            author_counts[name] += 1
+            last_name_counts[name.split()[0]] += 1
+    professor_last_name = last_name_counts.most_common(1)[0][0] if last_name_counts else ""
+    filtered_counts = Counter({a: author_counts[a] for a in author_counts
+                               if professor_last_name.lower() not in a.lower()})
+    collaborators = [
+        {"name": name, "count": count, "is_professor": False}
+        for name, count in filtered_counts.most_common(15)
+    ]
+
+    # 3. Research themes: keyword scan of title + first 400 chars of first chunk
+    theme_map = {
+        "HIV/AIDS":              ["hiv", "aids", "antiretroviral"],
+        "Tuberculosis":          ["tuberculosis", " tb ", "mycobacterium"],
+        "Infectious Disease":    ["infection", "infectious", "pathogen"],
+        "Immunology":            ["immune", "immunity", "immunodeficiency"],
+        "Clinical Trials":       ["trial", "randomized", "randomised", "placebo"],
+        "Epidemiology":          ["epidemiology", "cohort", "prevalence", "incidence"],
+        "Treatment Outcomes":    ["treatment outcome", "viral suppression", "adherence"],
+        "Coinfection":           ["coinfection", "hepatitis", "malaria"],
+        "Mortality & Survival":  ["mortality", "survival", "fatality"],
+        "Inflammation":          ["inflammation", "inflammatory", "cytokine"],
+        "Aging & Comorbidities": ["aging", "ageing", "elderly", "comorbid"],
+        "Neurology":             ["neurolog", "cognitive", "dementia"],
+    }
+    theme_counts: Counter = Counter()
+    for p in pubs:
+        text = ((p.get("title") or "") + " " + (p.get("chunk_text") or "")[:400]).lower()
+        for theme, keywords in theme_map.items():
+            if any(kw in text for kw in keywords):
+                theme_counts[theme] += 1
+    themes = [
+        {"theme": t, "count": c}
+        for t, c in sorted(theme_counts.items(), key=lambda x: -x[1])
+        if c > 0
+    ]
+
+    # 4. Geographic focus: keyword scan of title + first 400 chars of first chunk
+    geo_map = {
+        "Sub-Saharan Africa": ["africa", "kenya", "uganda", "tanzania", "zimbabwe",
+                               "ethiopia", "malawi", "zambia", "south africa", "nigeria",
+                               "mozambique", "rwanda", "botswana"],
+        "United States":      ["united states", " u.s.", "usa", "american"],
+        "Asia":               ["asia", "india", "china", "thailand", "vietnam",
+                               "cambodia", "myanmar", "indonesia"],
+        "Europe":             ["europe", "united kingdom", "france", "germany"],
+        "Latin America":      ["latin america", "brazil", "peru", "haiti", "mexico"],
+        "Global/Multi-site":  ["global", "multinational", "multi-site", "multisite",
+                               "international", "multicountry"],
+    }
+    geo_counts: Counter = Counter()
+    for p in pubs:
+        text = ((p.get("title") or "") + " " + (p.get("chunk_text") or "")[:400]).lower()
+        for region, keywords in geo_map.items():
+            if any(kw in text for kw in keywords):
+                geo_counts[region] += 1
+    geography = [
+        {"region": r, "count": c}
+        for r, c in sorted(geo_counts.items(), key=lambda x: -x[1])
+        if c > 0
+    ]
+
+    return (
+        {
+            "timeline":      timeline,
+            "collaborators": collaborators,
+            "themes":        themes,
+            "geography":     geography,
+        },
+        professor_last_name,
+    )
 
 
 # ── lifespan ───────────────────────────────────────────────────────────────────
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    global _retriever, _anthropic
+    global _retriever, _anthropic, _insights_data, _professor_name
     _retriever = Retriever()
+    _insights_data, _professor_name = _build_insights_data(_retriever._corpus)
     anthropic_key = os.environ.get("ANTHROPIC_API_KEY", "")
     if anthropic_key:
         import anthropic as _ant
@@ -87,6 +203,10 @@ class AskRequest(BaseModel):
     year_to:        Optional[int] = None
     author:         Optional[str] = None
     top_k:          int           = 8
+
+
+class InsightsRequest(BaseModel):
+    question: str
 
 
 # ── internal helpers ───────────────────────────────────────────────────────────
@@ -133,6 +253,42 @@ def _resolve_title(title: str) -> Optional[int]:
     return None
 
 
+def _classify_insight_question(question: str) -> str:
+    q = question.lower().strip().strip('"').strip("'")
+
+    # Specific-content questions belong to RAG, not chart templates.
+    # Check these before the LLM and keyword fallback.
+    _rag_phrases = [
+        "what did", "what were", "what was", "what has", "what have",
+        "how did", "how does", "how has",
+        "explain", "describe", "summarize", "summarise",
+        "tell me about", "what do you know about",
+        "what is the result", "what are the result",
+        "what is the finding", "what are the finding",
+    ]
+    if any(p in q for p in _rag_phrases):
+        print(f"[classify] RAG pre-screen match -> none | q={question!r}")
+        return "none"
+
+    # Keyword fallback: only match on strong analytical signals.
+    if any(w in q for w in ["how many", "over time", "trend", "annual"]):
+        print(f"[classify] keyword -> timeline | q={question!r}")
+        return "timeline"
+    if any(w in q for w in ["collaborat", "co-author", "coauthor", "who have i worked", "colleague"]):
+        print(f"[classify] keyword -> collaborators | q={question!r}")
+        return "collaborators"
+    if any(w in q for w in ["where", "country", "countries", "geographic", "geography",
+                             "location", "region", "place", "international", "global"]):
+        print(f"[classify] keyword -> geography | q={question!r}")
+        return "geography"
+    if any(w in q for w in ["which topics", "what topics", "research themes", "research areas",
+                             "main themes", "main topics", "what subjects"]):
+        print(f"[classify] keyword -> themes | q={question!r}")
+        return "themes"
+    print(f"[classify] no match -> none | q={question!r}")
+    return "none"
+
+
 # ── endpoints ──────────────────────────────────────────────────────────────────
 
 @app.get("/")
@@ -145,9 +301,21 @@ async def health():
     return {"status": "ok"}
 
 
+@app.get("/debug/authors")
+async def debug_authors():
+    from collections import Counter
+    author_counts = Counter()
+    for chunk in _retriever._corpus:
+        for name in [a.strip() for a in (chunk.get("authors") or "").split(",") if a.strip()]:
+            author_counts[name] += 1
+    return {"top_30": author_counts.most_common(30)}
+
+
 @app.get("/status")
 async def status():
-    return JSONResponse(content=_retriever.corpus_stats())
+    stats = _retriever.corpus_stats()
+    stats["professor_name"] = _professor_name
+    return JSONResponse(content=stats)
 
 
 @app.get("/publications")
@@ -253,3 +421,24 @@ async def ask(body: AskRequest):
 
     except Exception as exc:
         return JSONResponse({"error": str(exc)}, status_code=500)
+
+
+@app.post("/insights")
+async def insights(body: InsightsRequest):
+    if not body.question.strip():
+        return JSONResponse({"error": "question is required"}, status_code=400)
+
+    template = _classify_insight_question(body.question)
+
+    if template not in _insights_data:
+        return JSONResponse({
+            "template": "none",
+            "message":  "Try asking about publication trends, collaborators, research themes, or geographic focus",
+            "data":     None,
+        })
+
+    return JSONResponse({
+        "template": template,
+        "message":  None,
+        "data":     _insights_data[template],
+    })
