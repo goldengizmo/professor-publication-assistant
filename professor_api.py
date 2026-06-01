@@ -43,22 +43,24 @@ _insights_data: dict = {}
 _professor_name: str = ""
 
 _SYSTEM_PROMPT = (
-    "You are a research assistant with access to excerpts from a professor's "
-    "published papers. Answer the user's question using only the provided context. "
-    "Be concise, cite specific findings, and indicate when the context is insufficient."
+    "You are a research assistant helping a professor explore their own body of work. "
+    "Answer questions as if speaking to the professor about their own work — use 'you' and 'your'. "
+    "Use only the provided context excerpts to answer. Be concise and cite specific findings. "
+    "Never say you lack access to their publications or publication record; "
+    "if the context doesn't contain the answer, say the available excerpts don't cover that detail."
 )
 
 _CLASSIFY_PROMPT = (
-    "You classify questions about an academic publication corpus into chart categories.\n"
-    "Return 'none' if the question asks about specific content, findings, papers, drugs, diseases,\n"
-    "or any particular event or result — those need a text answer, not a chart.\n"
-    "Only return a category when the question clearly asks for an analytical overview of the whole corpus:\n"
-    "  timeline      - publication counts or trends across years (e.g. 'how many papers per year')\n"
-    "  collaborators - co-authorship patterns (e.g. 'who have I worked with most')\n"
-    "  themes        - recurring research topics (e.g. 'what are my main research themes')\n"
-    "  geography     - geographic focus of the work (e.g. 'where is my research focused')\n"
-    "If in doubt, return 'none'.\n"
-    "Reply with exactly one lowercase word: timeline, collaborators, themes, geography, or none.\n\n"
+    "Classify this question into exactly one category. "
+    "Only classify as a chart category if the question is asking for an overview, pattern, or trend across ALL the professor's work. "
+    "Return 'none' for ANY question asking about specific findings, results, drugs, diseases, trials, or papers.\n\n"
+    "Categories:\n"
+    "  timeline      - trends or counts across years (e.g. 'publications over time', 'output by decade')\n"
+    "  collaborators - co-authorship patterns (e.g. 'who have I worked with', 'research partners', 'which researchers')\n"
+    "  themes        - research topics across corpus (e.g. 'what do I research', 'main topics', 'diseases I study')\n"
+    "  geography     - locations in the work (e.g. 'where is my work focused', 'what countries', 'parts of the world')\n"
+    "  none          - specific content, findings, results, or anything not clearly an overview\n\n"
+    "Reply with exactly one word: timeline, collaborators, themes, geography, or none.\n"
     "Question: "
 )
 
@@ -270,8 +272,34 @@ def _classify_insight_question(question: str) -> str:
         print(f"[classify] RAG pre-screen match -> none | q={question!r}")
         return "none"
 
+    if _anthropic:
+        try:
+            resp = _anthropic.messages.create(
+                model="claude-haiku-4-5",
+                max_tokens=10,
+                messages=[{"role": "user", "content": _CLASSIFY_PROMPT + question}],
+            )
+            word = resp.content[0].text.strip().lower().split()[0]
+            if word.startswith("collabor"):
+                print(f"[classify] LLM -> collaborators | q={question!r}")
+                return "collaborators"
+            if word.startswith("geograph"):
+                print(f"[classify] LLM -> geography | q={question!r}")
+                return "geography"
+            if word.startswith("theme"):
+                print(f"[classify] LLM -> themes | q={question!r}")
+                return "themes"
+            if word.startswith("time"):
+                print(f"[classify] LLM -> timeline | q={question!r}")
+                return "timeline"
+            print(f"[classify] LLM -> none (word={word!r}) | q={question!r}")
+            return "none"
+        except Exception:
+            pass  # fall through to keyword fallback
+
     # Keyword fallback: only match on strong analytical signals.
-    if any(w in q for w in ["how many", "over time", "trend", "annual"]):
+    if any(w in q for w in ["how many", "over time", "over the years", "over the decades",
+                             "trend", "annual", "output", "changed over", "decades", "productivity"]):
         print(f"[classify] keyword -> timeline | q={question!r}")
         return "timeline"
     if any(w in q for w in ["collaborat", "co-author", "coauthor", "who have i worked", "colleague"]):
