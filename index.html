@@ -1,11 +1,16 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Professor Publication Assistant</title>
   <style>
-    * { margin: 0; padding: 0; box-sizing: border-box; }
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
 
     body {
       font-family: Arial, sans-serif;
@@ -18,11 +23,21 @@
       padding: 40px 20px;
     }
 
-    h1 { color: #e94560; margin-bottom: 6px; }
+    h1 {
+      color: #e94560;
+      margin-bottom: 6px;
+    }
 
-    p.subtitle { color: #aaa; margin-bottom: 30px; font-size: 15px; }
+    p.subtitle {
+      color: #aaa;
+      margin-bottom: 30px;
+      font-size: 15px;
+    }
 
-    .container { width: 100%; max-width: 800px; }
+    .container {
+      width: 100%;
+      max-width: 800px;
+    }
 
     .section {
       background: #16213e;
@@ -48,7 +63,9 @@
     }
 
     @media (max-width: 480px) {
-      .status-grid { grid-template-columns: 1fr; }
+      .status-grid {
+        grid-template-columns: 1fr;
+      }
     }
 
     .stat {
@@ -58,8 +75,17 @@
       text-align: center;
     }
 
-    .stat-value { font-size: 22px; font-weight: bold; color: #e94560; }
-    .stat-label { font-size: 12px; color: #aaa; margin-top: 4px; }
+    .stat-value {
+      font-size: 22px;
+      font-weight: bold;
+      color: #e94560;
+    }
+
+    .stat-label {
+      font-size: 12px;
+      color: #aaa;
+      margin-top: 4px;
+    }
 
     /* Inputs */
     textarea,
@@ -75,10 +101,18 @@
       font-size: 15px;
     }
 
-    textarea { resize: vertical; }
+    textarea {
+      resize: vertical;
+    }
 
-    .filter-row { display: flex; gap: 12px; }
-    .filter-row input { flex: 1; }
+    .filter-row {
+      display: flex;
+      gap: 12px;
+    }
+
+    .filter-row input {
+      flex: 1;
+    }
 
     /* Buttons */
     button {
@@ -93,7 +127,9 @@
       margin-bottom: 8px;
     }
 
-    button:hover { background: #c73652; }
+    button:hover {
+      background: #c73652;
+    }
 
     button.secondary {
       background: #0f3460;
@@ -101,11 +137,19 @@
       padding: 9px;
     }
 
-    button.secondary:hover { background: #1a4a8a; }
+    button.secondary:hover {
+      background: #1a4a8a;
+    }
 
     /* Filters panel */
-    .filters-panel { display: none; margin-top: 4px; }
-    .filters-panel.open { display: block; }
+    .filters-panel {
+      display: none;
+      margin-top: 4px;
+    }
+
+    .filters-panel.open {
+      display: block;
+    }
 
     /* Answer box */
     .answer-box {
@@ -134,7 +178,9 @@
       border-left: 3px solid #e94560;
     }
 
-    .source-card:first-child { margin-top: 0; }
+    .source-card:first-child {
+      margin-top: 0;
+    }
 
     .source-title {
       color: #e94560;
@@ -229,19 +275,29 @@
     }
 
     /* States */
-    .loading { color: #aaa; font-style: italic; }
-    .error   { color: #e94560; }
-    .success { color: #4ecca3; }
+    .loading {
+      color: #aaa;
+      font-style: italic;
+    }
+
+    .error {
+      color: #e94560;
+    }
+
+    .success {
+      color: #4ecca3;
+    }
   </style>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 </head>
+
 <body>
   <div class="container">
     <h1 id="welcome-heading">Professor Publication Assistant</h1>
     <p class="subtitle">Search and ask questions across the professor's publication archive</p>
 
     <!-- Upload -->
-    <div class="section">
+    <div class="section" style="display:none">
       <h2>Upload Publication Master List</h2>
       <p class="upload-note">
         Upload a <strong>.docx</strong> file containing the full publication list.
@@ -269,10 +325,10 @@
       <div class="filters-panel" id="filtersPanel">
         <div class="filter-row">
           <input type="number" id="yearFrom" placeholder="Year from (e.g. 2010)" />
-          <input type="number" id="yearTo"   placeholder="Year to (e.g. 2023)" />
+          <input type="number" id="yearTo" placeholder="Year to (e.g. 2023)" />
         </div>
         <input type="text" id="author" placeholder="Author contains (case-insensitive)" />
-        <input type="text" id="doi"    placeholder="DOI (exact match)" />
+        <input type="text" id="doi" placeholder="DOI (exact match)" />
         <input type="number" id="pubId" placeholder="Publication ID (exact)" />
         <button class="reset-btn" onclick="resetFilters()">Reset Filters</button>
       </div>
@@ -338,7 +394,7 @@
       const grid = document.getElementById('statusGrid');
       try {
         const resp = await fetch('/status');
-        const d    = await resp.json();
+        const d = await resp.json();
 
         const years = d.year_distribution ? Object.keys(d.year_distribution).sort() : [];
         const yearRange = years.length >= 2
@@ -367,9 +423,9 @@
     // ── Filters ────────────────────────────────────────────────────────────────
 
     function toggleFilters() {
-      const panel  = document.getElementById('filtersPanel');
+      const panel = document.getElementById('filtersPanel');
       const button = document.getElementById('filterToggle');
-      const open   = panel.classList.toggle('open');
+      const open = panel.classList.toggle('open');
       button.textContent = open ? '- Filters' : '+ Filters';
     }
 
@@ -385,32 +441,32 @@
       const question = document.getElementById('question').value.trim();
       if (!question) { alert('Please enter a question.'); return; }
 
-      const resultSection  = document.getElementById('resultSection');
+      const resultSection = document.getElementById('resultSection');
       const sourcesSection = document.getElementById('sourcesSection');
-      const resultTitle    = document.getElementById('resultTitle');
-      const answerBox      = document.getElementById('answer');
-      const queryNote      = document.getElementById('queryNote');
+      const resultTitle = document.getElementById('resultTitle');
+      const answerBox = document.getElementById('answer');
+      const queryNote = document.getElementById('queryNote');
       const chartContainer = document.getElementById('chartContainer');
-      const sourcesDiv     = document.getElementById('sources');
+      const sourcesDiv = document.getElementById('sources');
 
       // Reset
-      resultSection.style.display  = 'block';
+      resultSection.style.display = 'block';
       sourcesSection.style.display = 'none';
-      answerBox.style.display      = 'none';
-      answerBox.innerHTML          = '';
+      answerBox.style.display = 'none';
+      answerBox.innerHTML = '';
       chartContainer.style.display = 'none';
-      queryNote.textContent        = '';
-      sourcesDiv.innerHTML         = '';
-      resultTitle.textContent      = 'Thinking…';
+      queryNote.textContent = '';
+      sourcesDiv.innerHTML = '';
+      resultTitle.textContent = 'Thinking…';
 
       if (_currentChart) { _currentChart.destroy(); _currentChart = null; }
 
       // 1. Check /insights
       try {
         const iResp = await fetch('/insights', {
-          method:  'POST',
+          method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body:    JSON.stringify({ question }),
+          body: JSON.stringify({ question }),
         });
         const iData = await iResp.json();
 
@@ -430,26 +486,26 @@
       // 2. Fall back to /ask
       resultTitle.textContent = 'Answer';
       answerBox.style.display = 'block';
-      answerBox.innerHTML     = '<span class="loading">Searching and thinking…</span>';
+      answerBox.innerHTML = '<span class="loading">Searching and thinking…</span>';
 
       const body = { question };
       const yearFrom = document.getElementById('yearFrom').value;
-      const yearTo   = document.getElementById('yearTo').value;
-      const author   = document.getElementById('author').value.trim();
-      const doi      = document.getElementById('doi').value.trim();
-      const pubId    = document.getElementById('pubId').value.trim();
+      const yearTo = document.getElementById('yearTo').value;
+      const author = document.getElementById('author').value.trim();
+      const doi = document.getElementById('doi').value.trim();
+      const pubId = document.getElementById('pubId').value.trim();
 
-      if (yearFrom) body.year_from      = parseInt(yearFrom);
-      if (yearTo)   body.year_to        = parseInt(yearTo);
-      if (author)   body.author         = author;
-      if (doi)      body.doi            = doi;
-      if (pubId)    body.publication_id = parseInt(pubId);
+      if (yearFrom) body.year_from = parseInt(yearFrom);
+      if (yearTo) body.year_to = parseInt(yearTo);
+      if (author) body.author = author;
+      if (doi) body.doi = doi;
+      if (pubId) body.publication_id = parseInt(pubId);
 
       try {
         const resp = await fetch('/ask', {
-          method:  'POST',
+          method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body:    JSON.stringify(body),
+          body: JSON.stringify(body),
         });
         const data = await resp.json();
 
@@ -477,11 +533,11 @@
     // ── Chart rendering ────────────────────────────────────────────────────────
 
     function renderChart(template, data) {
-      const titleEl    = document.getElementById('resultTitle');
-      const ctx        = document.getElementById('insightChart').getContext('2d');
-      const gridColor  = '#2a2a4a';
-      const tickColor  = '#aaa';
-      const baseOpts   = {
+      const titleEl = document.getElementById('resultTitle');
+      const ctx = document.getElementById('insightChart').getContext('2d');
+      const gridColor = '#2a2a4a';
+      const tickColor = '#aaa';
+      const baseOpts = {
         responsive: true,
         maintainAspectRatio: false,
         plugins: { legend: { display: false } },
@@ -539,8 +595,8 @@
 
       } else if (template === 'geography') {
         titleEl.textContent = 'Geographic Focus';
-        const labels  = data.map(d => d.region);
-        const values  = data.map(d => d.count);
+        const labels = data.map(d => d.region);
+        const values = data.map(d => d.count);
         const palette = ['#e94560', '#7aadff', '#4ecca3', '#f5a623', '#9b59b6', '#1abc9c'];
         _currentChart = new Chart(ctx, {
           type: 'doughnut',
@@ -559,15 +615,15 @@
     // ── Source cards ───────────────────────────────────────────────────────────
 
     function buildSourceCard(s, i) {
-      const title    = s.title   || '(untitled)';
-      const year     = s.year    || '';
-      const authors  = s.authors || '';
-      const doi      = s.doi     || '';
-      const excerpt  = (s.chunk_text || '').substring(0, 380);
+      const title = s.title || '(untitled)';
+      const year = s.year || '';
+      const authors = s.authors || '';
+      const doi = s.doi || '';
+      const excerpt = (s.chunk_text || '').substring(0, 380);
       const ellipsis = (s.chunk_text || '').length > 380 ? '...' : '';
-      const vRank    = s.vector_rank ? `<span class="badge">vector #${s.vector_rank}</span>` : '';
-      const bRank    = s.bm25_rank   ? `<span class="badge">BM25 #${s.bm25_rank}</span>`    : '';
-      const doiHtml  = doi ? `<div class="source-doi">DOI: ${doi}</div>` : '';
+      const vRank = s.vector_rank ? `<span class="badge">vector #${s.vector_rank}</span>` : '';
+      const bRank = s.bm25_rank ? `<span class="badge">BM25 #${s.bm25_rank}</span>` : '';
+      const doiHtml = doi ? `<div class="source-doi">DOI: ${doi}</div>` : '';
 
       return `
         <div class="source-card">
@@ -590,11 +646,12 @@
         .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
     }
 
-    document.getElementById('question').addEventListener('keydown', function(e) {
+    document.getElementById('question').addEventListener('keydown', function (e) {
       if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) askQuestion();
     });
 
     loadStatus();
   </script>
 </body>
+
 </html>
